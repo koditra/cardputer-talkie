@@ -274,6 +274,19 @@ connect();
 
 )rawliteral";
 
+String getTimestamp() {
+
+  unsigned long seconds = millis() / 1000;
+
+  int minutes = seconds / 60;
+  int secs = seconds % 60;
+
+  char buffer[8];
+  sprintf(buffer, "[%02d:%02d]", minutes, secs);
+
+  return String(buffer);
+}
+
 void broadcastClients(){
   String msg="{\"type\":\"clients\",\"count\":"+String(webSocket.connectedClients())+"}";
   webSocket.broadcastTXT(msg);
@@ -289,10 +302,14 @@ void webSocketEvent(uint8_t num,WStype_t type,uint8_t *payload,size_t length){
       Serial.println(ip);
 
       if(messageCount < 8){
-          messages[messageCount++] = ip.toString() + " joined";
+          messages[messageCount++] =
+            getTimestamp() + " " +
+            ip.toString() + " joined";
       }else{
         for(int i=1;i<8;i++) messages[i-1]=messages[i];
-        messages[7]=ip.toString() + " joined";
+        messages[7] =
+          getTimestamp() + " " +
+          ip.toString() + " joined";
       }
 
 drawChat();
@@ -316,15 +333,22 @@ drawChat();
       }
 
       if(messageCount < 8){
-      messages[messageCount++] = ip.toString() + ": " + text;
+      messages[messageCount++] =
+        getTimestamp() + " " +
+        ip.toString() + ": " +
+        text;
+
       }else{
         for(int i=1;i<8;i++){
           messages[i-1]=messages[i];
         }
-        messages[7]=ip.toString() + ": " + text;
-        notificationBeep();
+        messages[7] =
+          getTimestamp() + " " +
+          ip.toString() + ": " +
+          text;
       }
 
+      notificationBeep();
       drawChat();
 
       String json = "{\"type\":\"chat\",\"ip\":\"" +
@@ -351,6 +375,31 @@ void notificationBeep() {
   M5Cardputer.Speaker.tone(1000, 100);
 }
 
+void printWrapped(String text, int maxChars = 26) {
+
+  while (text.length() > 0) {
+
+    if (text.length() <= maxChars) {
+      M5Cardputer.Display.println(text);
+      return;
+    }
+
+    int split = text.lastIndexOf(' ', maxChars);
+
+    if (split <= 0) {
+      split = maxChars;
+    }
+
+    M5Cardputer.Display.println(text.substring(0, split));
+
+    text = text.substring(split);
+
+    while (text.startsWith(" ")) {
+      text.remove(0, 1);
+    }
+  }
+}
+
 void drawChat() {
 
   M5Cardputer.Display.fillScreen(TFT_BLACK);
@@ -367,34 +416,33 @@ void drawChat() {
 
   for (int i = start; i < messageCount; i++) {
 
-    String line = messages[i];
+    printWrapped(messages[i]);
 
-    while (line.length() > 26) {
-      M5Cardputer.Display.println(line.substring(0, 26));
-      line = line.substring(26);
-    }
-
-    M5Cardputer.Display.println(line);
   }
 
   M5Cardputer.Display.println("----------------");
-  M5Cardputer.Display.print("> ");
-  M5Cardputer.Display.print(currentInput);
 
-  if (cursorVisible) {
-    M5Cardputer.Display.print("_");
+  String input = "> " + currentInput;
+
+  if(cursorVisible){
+      input += "_";
   }
+  printWrapped(input);
 }
 
 void sendHostMessage(String text) {
 
   if (messageCount < 8) {
-    messages[messageCount++] = "HOST: " + text;
+    messages[messageCount++] =
+      getTimestamp() + " HOST: " +
+      text;
   } else {
     for (int i = 1; i < 8; i++) {
       messages[i - 1] = messages[i];
     }
-    messages[7] = "HOST: " + text;
+    messages[7] =
+      getTimestamp() + " HOST: " +
+      text;
   }
 
   drawChat();
@@ -420,7 +468,7 @@ void setup(){
   M5Cardputer.Display.setTextSize(1);
 
   //print messages
-  messages[0] = "CardTalk Started";
+  messages[0] = getTimestamp() + " CardTalk Started";
   messageCount = 1;
   drawChat();
 
