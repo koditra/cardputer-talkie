@@ -3,6 +3,7 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <WebSocketsServer.h>
+#include <ArduinoJson.h>
 
 // wifi config
 const char* AP_SSID = "CardTalk";
@@ -14,6 +15,10 @@ WebSocketsServer webSocket(81);
 //blinking cursor globals
 bool cursorVisible = true;
 unsigned long lastCursorBlink = 0;
+
+//battery globals
+unsigned long lastBatteryUpdate = 0;
+int batteryPercent = 0;
 
 //client counter
 int clientCount = 0;
@@ -27,11 +32,12 @@ String currentInput = "";
 void drawChat();
 void notificationBeep();
 void addMessageLine(const String& line);
-String jsonEscape(String s);
 void broadcastClients();
 void sendChatJSON(const String& text);
 void handleIncomingText(uint8_t num, const String& text);
 void setupWiFiPassword();
+void drawBattery();
+int getBatteryPercent();
 
 // web ui
 const char INDEX_HTML[] PROGMEM = R"rawliteral(
@@ -252,8 +258,9 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
                         addMessage(msg.text, msg.role || "client");
 
                     if (msg.type === "clients") {
-                        document.getElementById("status").textContent =
+                        status.textContent =
                             "● Connected (" + msg.count + ")";
+                        status.className = "connected";
                     }
 
                 } catch (e) {
@@ -300,15 +307,6 @@ String getTimestamp() {
   sprintf(buffer, "[%02d:%02d]", minutes, secs);
 
   return String(buffer);
-}
-
-
-String jsonEscape(String s) {
-  s.replace("\\", "\\\\");
-  s.replace("\"", "\\\"");
-  s.replace("\n", " ");
-  s.replace("\r", " ");
-  return s;
 }
 
 void addMessageLine(const String& line) {
@@ -370,59 +368,86 @@ void drawChat() {
   clientCount = webSocket.connectedClients();
 
   M5Cardputer.Display.fillScreen(TFT_BLACK);
-  M5Cardputer.Display.setCursor(0, 0);
+
   M5Cardputer.Display.setTextColor(TFT_GREEN);
   M5Cardputer.Display.setTextSize(1);
 
-  M5Cardputer.Display.println("CardTalk");
+  //title
+  M5Cardputer.Display.setCursor(0, 0);
+  M5Cardputer.Display.print("CardTalk");
+
+  //battery percent
+  String batteryText = String(batteryPercent) + "%";
+
+  int batteryX = 240 - M5Cardputer.Display.textWidth(batteryText) - 2;
+
+  M5Cardputer.Display.setCursor(batteryX, 0);
+  M5Cardputer.Display.print(batteryText);
+
+  //client num
+  M5Cardputer.Display.setCursor(0, 12);
   M5Cardputer.Display.println(
     "Clients: " + String(clientCount)
   );
+
   M5Cardputer.Display.println("----------------");
 
+  //chat messages
   const int visibleMessages = 8;
 
   int start = max(0, messageCount - visibleMessages);
 
   for (int i = start; i < messageCount; i++) {
-
     printWrapped(messages[i]);
-
   }
 
   M5Cardputer.Display.println("----------------");
 
+  //input area
   M5Cardputer.Display.print("> ");
 
   String input = currentInput;
 
   if (cursorVisible) {
-      input += "_";
+    input += "_";
   }
 
   printWrapped(input, 24);
 }
 
 void sendChatJSON(const String& text) {
-  String json =
-  "{\"type\":\"chat\",\"text\":\"" +
-  jsonEscape(text) +
-  "\",\"role\":\"host\"}";
+
+  StaticJsonDocument<512> doc;
+
+  doc["type"] = "chat";
+  doc["text"] = text;
+  doc["role"] = "host";
+
+  String json;
+  serializeJson(doc, json);
+
   webSocket.broadcastTXT(json);
 }
 
 void handleIncomingText(uint8_t num, const String& text) {
-  IPAddress ip=webSocket.remoteIP(num);
-  String line=getTimestamp()+" "+ip.toString()+": "+text;
+
+  IPAddress ip = webSocket.remoteIP(num);
+
+  String line = getTimestamp() + " " + ip.toString() + ": " + text;
 
   addMessageLine(line);
   notificationBeep();
   drawChat();
 
-  String json=
-  "{\"type\":\"chat\",\"text\":\""+
-  jsonEscape(line)+
-  "\",\"role\":\"client\"}";
+
+  StaticJsonDocument<256> doc;
+
+  doc["type"] = "chat";
+  doc["text"] = line;
+  doc["role"] = "client";
+
+  String json;
+  serializeJson(doc, json);
 
   webSocket.broadcastTXT(json);
 }
@@ -442,10 +467,14 @@ void webSocketEvent(uint8_t num,WStype_t type,uint8_t *payload,size_t length){
       //send message history
       for (int i = 0; i < messageCount; i++) {
 
-        String json =
-        "{\"type\":\"chat\",\"text\":\"" +
-        jsonEscape(messages[i]) +
-        "\",\"role\":\"system\"}";
+        StaticJsonDocument<256> doc;
+
+        doc["type"] = "chat";
+        doc["text"] = messages[i];
+        doc["role"] = "system";
+
+        String json;
+        serializeJson(doc, json);
 
         webSocket.sendTXT(num, json);
       }
@@ -463,26 +492,41 @@ void webSocketEvent(uint8_t num,WStype_t type,uint8_t *payload,size_t length){
     }
 
     case WStype_TEXT:{
-      String text="";
-      for(size_t i=0;i<length;i++){
-        text+=(char)payload[i];
+      StaticJsonDocument<1024> doc;
+
+      DeserializationError error =
+        deserializeJson(doc, payload, length);
+
+      if(error){
+      Serial.println("JSON parse failed");
+
+      String raw = "";
+
+      for(size_t i = 0; i < length; i++){
+        raw += (char)payload[i];
       }
 
-      if(text.startsWith("{") && text.indexOf("\"type\":\"chat\"") >= 0){
-        int p=text.indexOf("\"text\":\"");
-        if(p >= 0){
-          p += 8;
-          String body=text.substring(p);
-          int end=body.lastIndexOf('"');
-          if(end > 0) body=body.substring(0,end);
-          handleIncomingText(num,body);
-          break;
-        }
-      }
+      handleIncomingText(num, raw);
 
-      handleIncomingText(num,text);
-      break;
+    break;
     }
+
+    String type = doc["type"] | "";
+
+    if(type == "chat"){
+
+      String text = doc["text"] | "";
+
+      if(text.length() > 200){
+        text = text.substring(0,200);
+      }
+
+      if(text.length() > 0){
+        handleIncomingText(num, text);
+      }
+    }
+  break;
+}
 
     default:
       break;
@@ -570,12 +614,48 @@ void setupWiFiPassword() {
   }
 }
 
+void drawBattery() {
+
+  String batteryText = String(batteryPercent) + "%";
+
+  int batteryX = 240 - M5Cardputer.Display.textWidth(batteryText) - 2;
+
+  //clear old text
+  M5Cardputer.Display.fillRect(180, 0, 60, 12, TFT_BLACK);
+
+  M5Cardputer.Display.setTextColor(TFT_GREEN);
+  M5Cardputer.Display.setTextSize(1);
+
+  M5Cardputer.Display.setCursor(batteryX, 0);
+  M5Cardputer.Display.print(batteryText);
+}
+
+int getBatteryPercent() {
+  float voltage = M5Cardputer.Power.getBatteryVoltage();
+
+  int percent;
+
+  if (voltage >= 4200)
+    percent = 100;
+  else if (voltage <= 3300)
+    percent = 0;
+  else
+    percent = (voltage - 3300) * 100 / 900;
+
+  return percent;
+}
+
+void updateBattery() {
+  batteryPercent = getBatteryPercent();
+}
+
 void setup(){
 
   Serial.begin(115200);
 
   auto cfg=M5.config();
   M5Cardputer.begin(cfg,true);
+  updateBattery();
   M5Cardputer.Display.setRotation(1);
 
   setupWiFiPassword();
@@ -605,8 +685,10 @@ void setup(){
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
 
-    //print messages
+  //print messages
   addMessageLine(getTimestamp()+" CardTalk Started");
+
+  updateBattery();
   drawChat();
 }
 
@@ -620,6 +702,13 @@ void loop() {
     lastCursorBlink = millis();
     cursorVisible = !cursorVisible;
     drawChat();
+  }
+
+  if (millis() - lastBatteryUpdate > 30000) {
+    lastBatteryUpdate = millis();
+
+    updateBattery();
+    drawBattery();
   }
 
   if (M5Cardputer.Keyboard.isChange()) {
@@ -641,9 +730,12 @@ void loop() {
     if (status.enter && currentInput.length() > 0) {
         String msg = currentInput;
         currentInput = "";
-        addMessageLine(getTimestamp()+" HOST: "+msg);
+        
+        String line = getTimestamp() + " HOST: " + msg;
+
+        addMessageLine(line);
         drawChat();
-        sendChatJSON(getTimestamp()+" HOST: "+msg);
+        sendChatJSON(line);
     }
 
     drawChat();
