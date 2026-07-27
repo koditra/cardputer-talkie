@@ -6,7 +6,7 @@
 
 // wifi config
 const char* AP_SSID = "CardTalk";
-const char* AP_PASS = "";
+String wifiPassword = "";
 
 WebServer server(80);
 WebSocketsServer webSocket(81);
@@ -14,6 +14,9 @@ WebSocketsServer webSocket(81);
 //blinking cursor globals
 bool cursorVisible = true;
 unsigned long lastCursorBlink = 0;
+
+//client counter
+int clientCount = 0;
 
 //messages and input variables
 String messages[8];
@@ -23,255 +26,267 @@ String currentInput = "";
 //declares functions by function prototype
 void drawChat();
 void notificationBeep();
-
+void addMessageLine(const String& line);
+String jsonEscape(String s);
+void broadcastClients();
+void sendChatJSON(const String& text);
+void handleIncomingText(uint8_t num, const String& text);
+void setupWiFiPassword();
 
 // web ui
 const char INDEX_HTML[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CardTalk</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: monospace;
+        }
 
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+        body {
+            background: #06080b;
+            color: #33ff88;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
 
-<title>CardTalk</title>
+        #app {
+            width: min(700px, 95vw);
+            height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
 
-<style>
+            border: 2px solid #33ff88;
+            border-radius: 12px;
 
-* {
-  box-sizing:border-box;
-  margin:0;
-  padding:0;
-  user-select:none;
-}
+            box-shadow: 0 0 20px #00ff6640;
+        }
 
-body {
-  background:#0b0e14;
-  color:#e0e6ed;
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-  height:100vh;
-  display:flex;
-  flex-direction:column;
-  justify-content:space-between;
-  align-items:center;
-  padding:24px 16px;
-}
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
 
-header {
-  text-align:center;
-}
+            padding: 14px;
 
-h1 {
-  font-size:2rem;
-  letter-spacing:3px;
-  color:#00e676;
-}
+            background: #09110d;
+            border-bottom: 1px solid #1d5;
+        }
 
-.status-bar {
-  margin-top:8px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap:8px;
-  color:#8a99ad;
-}
+        header h1 {
+            font-size: 20px;
+            letter-spacing: 2px;
+        }
 
-.status-dot {
-  width:10px;
-  height:10px;
-  border-radius:50%;
-  background:#ff5252;
-}
+        #status {
+            font-size: 14px;
+        }
 
-.status-dot.connected {
-  background:#00e676;
-}
+        .connected {
+            color: #33ff88;
+        }
 
-#chat {
-  width:95%;
-  max-width:500px;
-  height:60vh;
-  overflow-y:auto;
-  background:#111827;
-  border-radius:15px;
-  padding:15px;
-}
+        .disconnected {
+            color: #ff5555;
+        }
 
-.message {
-  background:#1f2937;
-  padding:10px;
-  margin-bottom:10px;
-  border-radius:10px;
-}
+        #chat {
+            flex: 1;
+            overflow-y: auto;
 
-.ip {
-  color:#00e676;
-  font-weight:bold;
-}
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
 
-.input-area {
-  width:95%;
-  max-width:500px;
-  display:flex;
-  gap:8px;
-}
+            padding: 14px;
 
-input {
-  flex:1;
-  padding:12px;
-  border-radius:10px;
-  border:none;
-  font-size:16px;
-}
+            background: #050607;
+        }
 
-button {
-  padding:12px 20px;
-  border:none;
-  border-radius:10px;
-  background:#00e676;
-  font-weight:bold;
-}
+        .msg {
+            padding: 8px 10px;
 
-footer {
-  color:#64748b;
-}
+            background: #111;
+            border-left: 3px solid #33ff88;
 
-</style>
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
 
+        .system {
+            border-left-color: #ffaa00;
+            color: #ffcc66;
+        }
+
+        .host {
+            border-left-color: #44ccff;
+        }
+
+        .client {
+            border-left-color: #33ff88;
+        }
+
+        footer {
+            display: flex;
+            gap: 10px;
+
+            padding: 12px;
+
+            background: #09110d;
+            border-top: 1px solid #1d5;
+        }
+
+        input {
+            flex: 1;
+
+            padding: 12px;
+
+            background: #111;
+            color: #33ff88;
+
+            border: 1px solid #33ff88;
+            outline: none;
+
+            font-size: 15px;
+        }
+
+        button {
+            padding: 12px 22px;
+
+            background: #33ff88;
+            color: black;
+
+            border: none;
+            cursor: pointer;
+
+            font-weight: bold;
+            transition: .15s;
+        }
+
+        button:hover {
+            background: #55ffaa;
+        }
+
+        button:active {
+            transform: scale(.97);
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #33ff88;
+        }
+    </style>
 </head>
 
 <body>
 
-<header>
+    <div id="app">
 
-<h1>CardTalk</h1>
+        <header>
+            <h1>CARDTALK</h1>
+            <div id="status" class="disconnected">● Offline</div>
+        </header>
 
-<div class="status-bar">
-<span id="dot" class="status-dot"></span>
-<span id="status">Disconnected</span>
-</div>
+        <div id="chat"></div>
 
-</header>
+        <footer>
+            <input id="message" placeholder="Type a message...">
+            <button onclick="sendMessage()">SEND</button>
+        </footer>
 
+    </div>
 
-<div id="chat"></div>
+    <script>
+        let ws;
 
+        const chat = document.getElementById("chat");
+        const input = document.getElementById("message");
+        const status = document.getElementById("status");
 
-<div class="input-area">
+        function addMessage(text, type = "client") {
+            const div = document.createElement("div");
 
-<input id="message" placeholder="Message">
+            div.className = "msg " + type;
+            div.textContent = text;
 
-<button onclick="sendMessage()">
-Send
-</button>
+            chat.appendChild(div);
+            chat.scrollTop = chat.scrollHeight;
+        }
 
-</div>
+        function connect() {
+            ws = new WebSocket("ws://" + location.hostname + ":81/");
 
+            ws.onopen = () => {
+                status.textContent = "● Connected";
+                status.className = "connected";
 
-<footer>
-ESP32 Local Chat
-</footer>
+                addMessage("Connected to CardTalk", "system");
+            };
 
+            ws.onclose = () => {
+                status.textContent = "● Offline";
+                status.className = "disconnected";
 
-<script>
+                addMessage("Connection lost", "system");
 
-let ws;
+                setTimeout(connect, 2000);
+            };
 
+            ws.onmessage = (event) => {
+                try {
+                    const msg = JSON.parse(event.data);
 
-const chat=document.getElementById("chat");
-const input=document.getElementById("message");
-const status=document.getElementById("status");
-const dot=document.getElementById("dot");
+                    if (msg.type === "chat")
+                        addMessage(msg.text, msg.role || "client");
 
+                    if (msg.type === "clients") {
+                        document.getElementById("status").textContent =
+                            "● Connected (" + msg.count + ")";
+                    }
 
-function connect(){
+                } catch (e) {
+                    addMessage(event.data, "system");
+                }
+            };
+        }
 
-  ws=new WebSocket(
-    "ws://"+location.hostname+":81/"
-  );
+        function sendMessage() {
+            const text = input.value.trim();
 
+            if (text === "" || !ws || ws.readyState !== 1)
+                return;
 
-  ws.onopen=()=>{
+            ws.send(JSON.stringify({
+                type: "chat",
+                text: text
+            }));
 
-    status.innerText="Connected";
-    dot.classList.add("connected");
+            input.value = "";
+        }
 
-  };
+        input.addEventListener("keydown", (e) => {
+            if (e.key === "Enter")
+                sendMessage();
+        });
 
-
-  ws.onclose=()=>{
-
-    status.innerText="Disconnected";
-    dot.classList.remove("connected");
-
-    setTimeout(connect,2000);
-
-  };
-
-
-  ws.onmessage=(event)=>{
-
-    let msg=JSON.parse(event.data);
-
-
-    if(msg.type==="chat"){
-
-      let div=document.createElement("div");
-
-      div.className="message";
-
-      div.innerHTML=
-      "<span class='ip'>"+
-      msg.ip+
-      "</span><br>"+
-      msg.text;
-
-
-      chat.appendChild(div);
-
-      chat.scrollTop=chat.scrollHeight;
-
-    }
-
-  };
-
-}
-
-
-function sendMessage(){
-
-  if(input.value.length===0)
-    return;
-
-
-  if(ws.readyState===WebSocket.OPEN){
-
-    ws.send(
-      JSON.stringify(input.value)
-    );
-
-    input.value="";
-
-  }
-
-}
-
-
-input.addEventListener("keydown",(e)=>{
-
-  if(e.key==="Enter")
-    sendMessage();
-
-});
-
-
-connect();
-
-</script>
+        connect();
+    </script>
 
 </body>
-</html>
 
+</html>
 )rawliteral";
 
 String getTimestamp() {
@@ -287,88 +302,35 @@ String getTimestamp() {
   return String(buffer);
 }
 
-void broadcastClients(){
-  String msg="{\"type\":\"clients\",\"count\":"+String(webSocket.connectedClients())+"}";
-  webSocket.broadcastTXT(msg);
+
+String jsonEscape(String s) {
+  s.replace("\\", "\\\\");
+  s.replace("\"", "\\\"");
+  s.replace("\n", " ");
+  s.replace("\r", " ");
+  return s;
 }
 
-void webSocketEvent(uint8_t num,WStype_t type,uint8_t *payload,size_t length){
-
-  switch(type){
-
-    case WStype_CONNECTED:{
-      IPAddress ip=webSocket.remoteIP(num);
-      Serial.print("Client connected: ");
-      Serial.println(ip);
-
-      if(messageCount < 8){
-          messages[messageCount++] =
-            getTimestamp() + " " +
-            ip.toString() + " joined";
-      }else{
-        for(int i=1;i<8;i++) messages[i-1]=messages[i];
-        messages[7] =
-          getTimestamp() + " " +
-          ip.toString() + " joined";
-      }
-
-drawChat();
-      broadcastClients();
-      break;
-    }
-
-    case WStype_DISCONNECTED:{
-      Serial.print("Client disconnected: ");
-      Serial.println(num);
-      broadcastClients();
-      break;
-    }
-
-    case WStype_TEXT:{
-      IPAddress ip=webSocket.remoteIP(num);
-
-      String text="";
-      for(size_t i=0;i<length;i++){
-        text+=(char)payload[i];
-      }
-
-      if(messageCount < 8){
-      messages[messageCount++] =
-        getTimestamp() + " " +
-        ip.toString() + ": " +
-        text;
-
-      }else{
-        for(int i=1;i<8;i++){
-          messages[i-1]=messages[i];
-        }
-        messages[7] =
-          getTimestamp() + " " +
-          ip.toString() + ": " +
-          text;
-      }
-
-      notificationBeep();
-      drawChat();
-
-      String json = "{\"type\":\"chat\",\"ip\":\"" +
-                    ip.toString() +
-                    "\",\"text\":\"" +
-                    text +
-                    "\"}";
-
-      for(uint8_t i=0;i<WEBSOCKETS_SERVER_CLIENT_MAX;i++){
-        if(i != num){
-          webSocket.sendTXT(i,json);
-        }
-      }
-
-      break;
-    }
-
-    default:
-      break;
+void addMessageLine(const String& line) {
+  if (messageCount < 8) {
+    messages[messageCount++] = line;
+  } else {
+    for (int i = 1; i < 8; i++) messages[i - 1] = messages[i];
+    messages[7] = line;
   }
+}
+
+void broadcastClients(){
+  clientCount = webSocket.connectedClients();
+
+  String msg =
+  "{\"type\":\"clients\",\"count\":" +
+  String(clientCount) +
+  "}";
+
+  webSocket.broadcastTXT(msg);
+
+  drawChat();
 }
 
 void notificationBeep() {
@@ -392,7 +354,10 @@ void printWrapped(String text, int maxChars = 26) {
 
     M5Cardputer.Display.println(text.substring(0, split));
 
-    text = text.substring(split);
+    if (split == maxChars)
+      text = text.substring(split);
+    else
+      text = text.substring(split + 1);
 
     while (text.startsWith(" ")) {
       text.remove(0, 1);
@@ -402,12 +367,17 @@ void printWrapped(String text, int maxChars = 26) {
 
 void drawChat() {
 
+  clientCount = webSocket.connectedClients();
+
   M5Cardputer.Display.fillScreen(TFT_BLACK);
   M5Cardputer.Display.setCursor(0, 0);
   M5Cardputer.Display.setTextColor(TFT_GREEN);
   M5Cardputer.Display.setTextSize(1);
 
   M5Cardputer.Display.println("CardTalk");
+  M5Cardputer.Display.println(
+    "Clients: " + String(clientCount)
+  );
   M5Cardputer.Display.println("----------------");
 
   const int visibleMessages = 8;
@@ -422,55 +392,197 @@ void drawChat() {
 
   M5Cardputer.Display.println("----------------");
 
-  String input = "> " + currentInput;
+  M5Cardputer.Display.print("> ");
 
-  if(cursorVisible){
+  String input = currentInput;
+
+  if (cursorVisible) {
       input += "_";
   }
-  printWrapped(input);
+
+  printWrapped(input, 24);
 }
 
-void sendHostMessage(String text) {
+void sendChatJSON(const String& text) {
+  String json =
+  "{\"type\":\"chat\",\"text\":\"" +
+  jsonEscape(text) +
+  "\",\"role\":\"host\"}";
+  webSocket.broadcastTXT(json);
+}
 
-  if (messageCount < 8) {
-    messages[messageCount++] =
-      getTimestamp() + " HOST: " +
-      text;
-  } else {
-    for (int i = 1; i < 8; i++) {
-      messages[i - 1] = messages[i];
-    }
-    messages[7] =
-      getTimestamp() + " HOST: " +
-      text;
-  }
+void handleIncomingText(uint8_t num, const String& text) {
+  IPAddress ip=webSocket.remoteIP(num);
+  String line=getTimestamp()+" "+ip.toString()+": "+text;
 
+  addMessageLine(line);
+  notificationBeep();
   drawChat();
 
-  String json =
-    "{\"type\":\"chat\",\"ip\":\"HOST\",\"text\":\"" +
-    text +
-    "\"}";
+  String json=
+  "{\"type\":\"chat\",\"text\":\""+
+  jsonEscape(line)+
+  "\",\"role\":\"client\"}";
 
   webSocket.broadcastTXT(json);
+}
 
+void webSocketEvent(uint8_t num,WStype_t type,uint8_t *payload,size_t length){
+
+  switch(type){
+
+    case WStype_CONNECTED:{
+      IPAddress ip=webSocket.remoteIP(num);
+      Serial.print("Client connected: ");
+      Serial.println(ip);
+
+      addMessageLine(getTimestamp()+" "+ip.toString()+" joined");
+
+
+      //send message history
+      for (int i = 0; i < messageCount; i++) {
+
+        String json =
+        "{\"type\":\"chat\",\"text\":\"" +
+        jsonEscape(messages[i]) +
+        "\",\"role\":\"system\"}";
+
+        webSocket.sendTXT(num, json);
+      }
+
+      drawChat();
+      broadcastClients();
+      break;
+    }
+
+    case WStype_DISCONNECTED:{
+      Serial.print("Client disconnected: ");
+      Serial.println(num);
+      broadcastClients();
+      break;
+    }
+
+    case WStype_TEXT:{
+      String text="";
+      for(size_t i=0;i<length;i++){
+        text+=(char)payload[i];
+      }
+
+      if(text.startsWith("{") && text.indexOf("\"type\":\"chat\"") >= 0){
+        int p=text.indexOf("\"text\":\"");
+        if(p >= 0){
+          p += 8;
+          String body=text.substring(p);
+          int end=body.lastIndexOf('"');
+          if(end > 0) body=body.substring(0,end);
+          handleIncomingText(num,body);
+          break;
+        }
+      }
+
+      handleIncomingText(num,text);
+      break;
+    }
+
+    default:
+      break;
+  }
+}
+
+void setupWiFiPassword() {
+
+  M5Cardputer.Display.fillScreen(TFT_BLACK);
+  M5Cardputer.Display.setCursor(0,0);
+  M5Cardputer.Display.setTextColor(TFT_GREEN);
+  M5Cardputer.Display.setTextSize(1);
+
+  M5Cardputer.Display.println("CardTalk Setup");
+  M5Cardputer.Display.println("----------------");
+  M5Cardputer.Display.println("Enter WiFi password:");
+  M5Cardputer.Display.println("> ");
+
+  String input = "";
+
+  while(true){
+
+    M5Cardputer.update();
+
+    if(M5Cardputer.Keyboard.isChange()){
+
+      Keyboard_Class::KeysState status =
+        M5Cardputer.Keyboard.keysState();
+
+
+      for(char c : status.word){
+        input += c;
+
+        M5Cardputer.Display.print("*");
+      }
+
+
+      if(status.del && input.length() > 0){
+
+        input.remove(input.length()-1);
+
+        M5Cardputer.Display.fillScreen(TFT_BLACK);
+        M5Cardputer.Display.setCursor(0,0);
+
+        M5Cardputer.Display.println("CardTalk Setup");
+        M5Cardputer.Display.println("----------------");
+        M5Cardputer.Display.println("Enter WiFi password:");
+        M5Cardputer.Display.print("> ");
+
+        for(int i=0;i<input.length();i++)
+          M5Cardputer.Display.print("*");
+      }
+
+
+      if(status.enter){
+
+        if(input.length() < 8){
+
+          M5Cardputer.Display.println();
+          M5Cardputer.Display.println("Password too short!");
+          delay(1500);
+
+          input = "";
+
+          M5Cardputer.Display.fillScreen(TFT_BLACK);
+          M5Cardputer.Display.setCursor(0,0);
+
+          M5Cardputer.Display.println("CardTalk Setup");
+          M5Cardputer.Display.println("----------------");
+          M5Cardputer.Display.println("Enter WiFi password:");
+          M5Cardputer.Display.print("> ");
+
+          continue;
+        }
+
+        wifiPassword = input;
+
+        M5Cardputer.Display.println();
+        M5Cardputer.Display.println("Password saved!");
+        delay(1000);
+
+        return;
+      }
+    }
+  }
 }
 
 void setup(){
 
   Serial.begin(115200);
 
-  M5Cardputer.begin();
-
+  auto cfg=M5.config();
+  M5Cardputer.begin(cfg,true);
   M5Cardputer.Display.setRotation(1);
+
+  setupWiFiPassword();
+
   M5Cardputer.Display.fillScreen(TFT_BLACK);
   M5Cardputer.Display.setTextColor(TFT_GREEN);
   M5Cardputer.Display.setTextSize(1);
-
-  //print messages
-  messages[0] = getTimestamp() + " CardTalk Started";
-  messageCount = 1;
-  drawChat();
 
   IPAddress local_IP(192,168,4,1);
   IPAddress gateway(192,168,4,1);
@@ -478,7 +590,7 @@ void setup(){
 
   WiFi.mode(WIFI_AP);
   WiFi.softAPConfig(local_IP,gateway,subnet);
-  WiFi.softAP(AP_SSID,AP_PASS);
+  WiFi.softAP(AP_SSID,wifiPassword.c_str());
 
   Serial.println("CardTalk AP Active");
   Serial.print("Connect to: http://");
@@ -492,20 +604,23 @@ void setup(){
 
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
+
+    //print messages
+  addMessageLine(getTimestamp()+" CardTalk Started");
+  drawChat();
 }
 
 void loop() {
 
   server.handleClient();
   webSocket.loop();
+  M5Cardputer.update();
 
   if (millis() - lastCursorBlink >= 500) {
     lastCursorBlink = millis();
     cursorVisible = !cursorVisible;
     drawChat();
   }
-
-  M5Cardputer.update();
 
   if (M5Cardputer.Keyboard.isChange()) {
 
@@ -524,8 +639,11 @@ void loop() {
 
     //send
     if (status.enter && currentInput.length() > 0) {
-        sendHostMessage(currentInput);
+        String msg = currentInput;
         currentInput = "";
+        addMessageLine(getTimestamp()+" HOST: "+msg);
+        drawChat();
+        sendChatJSON(getTimestamp()+" HOST: "+msg);
     }
 
     drawChat();
