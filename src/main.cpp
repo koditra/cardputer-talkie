@@ -3,7 +3,7 @@
 #include <WebServer.h>
 #include <WebSocketsServer.h>
 
-// wifi congif
+// wifi config
 const char* AP_SSID = "CardTalk";
 const char* AP_PASS = ""; // open access point
 
