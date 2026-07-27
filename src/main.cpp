@@ -11,13 +11,18 @@ const char* AP_PASS = "";
 WebServer server(80);
 WebSocketsServer webSocket(81);
 
+//blinking cursor globals
+bool cursorVisible = true;
+unsigned long lastCursorBlink = 0;
+
 //messages and input variables
 String messages[8];
 int messageCount = 0;
 String currentInput = "";
 
-//declares drawChat by function prototype
+//declares functions by function prototype
 void drawChat();
+void notificationBeep();
 
 
 // web ui
@@ -317,6 +322,7 @@ drawChat();
           messages[i-1]=messages[i];
         }
         messages[7]=ip.toString() + ": " + text;
+        notificationBeep();
       }
 
       drawChat();
@@ -341,21 +347,64 @@ drawChat();
   }
 }
 
+void notificationBeep() {
+  M5Cardputer.Speaker.tone(1000, 100);
+}
+
 void drawChat() {
 
   M5Cardputer.Display.fillScreen(TFT_BLACK);
-  M5Cardputer.Display.setCursor(0,0);
+  M5Cardputer.Display.setCursor(0, 0);
   M5Cardputer.Display.setTextColor(TFT_GREEN);
   M5Cardputer.Display.setTextSize(1);
 
   M5Cardputer.Display.println("CardTalk");
   M5Cardputer.Display.println("----------------");
 
-  int start = max(0, messageCount - 8);
+  const int visibleMessages = 8;
 
-  for(int i = start; i < messageCount; i++){
-    M5Cardputer.Display.println(messages[i]);
+  int start = max(0, messageCount - visibleMessages);
+
+  for (int i = start; i < messageCount; i++) {
+
+    String line = messages[i];
+
+    while (line.length() > 26) {
+      M5Cardputer.Display.println(line.substring(0, 26));
+      line = line.substring(26);
+    }
+
+    M5Cardputer.Display.println(line);
   }
+
+  M5Cardputer.Display.println("----------------");
+  M5Cardputer.Display.print("> ");
+  M5Cardputer.Display.print(currentInput);
+
+  if (cursorVisible) {
+    M5Cardputer.Display.print("_");
+  }
+}
+
+void sendHostMessage(String text) {
+
+  if (messageCount < 8) {
+    messages[messageCount++] = "HOST: " + text;
+  } else {
+    for (int i = 1; i < 8; i++) {
+      messages[i - 1] = messages[i];
+    }
+    messages[7] = "HOST: " + text;
+  }
+
+  drawChat();
+
+  String json =
+    "{\"type\":\"chat\",\"ip\":\"HOST\",\"text\":\"" +
+    text +
+    "\"}";
+
+  webSocket.broadcastTXT(json);
 
 }
 
@@ -397,7 +446,40 @@ void setup(){
   webSocket.onEvent(webSocketEvent);
 }
 
-void loop(){
+void loop() {
+
   server.handleClient();
   webSocket.loop();
+
+  if (millis() - lastCursorBlink >= 500) {
+    lastCursorBlink = millis();
+    cursorVisible = !cursorVisible;
+    drawChat();
+  }
+
+  M5Cardputer.update();
+
+  if (M5Cardputer.Keyboard.isChange()) {
+
+    Keyboard_Class::KeysState status =
+        M5Cardputer.Keyboard.keysState();
+
+    //type normally
+    for (char c : status.word) {
+        currentInput += c;
+    }
+
+    //backspace
+    if (status.del && currentInput.length() > 0) {
+        currentInput.remove(currentInput.length() - 1);
+    }
+
+    //send
+    if (status.enter && currentInput.length() > 0) {
+        sendHostMessage(currentInput);
+        currentInput = "";
+    }
+
+    drawChat();
+  }
 }
