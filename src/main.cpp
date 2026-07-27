@@ -16,6 +16,9 @@ String messages[8];
 int messageCount = 0;
 String currentInput = "";
 
+//declares drawChat by function prototype
+void drawChat();
+
 
 // web ui
 const char INDEX_HTML[] PROGMEM = R"rawliteral(
@@ -279,6 +282,15 @@ void webSocketEvent(uint8_t num,WStype_t type,uint8_t *payload,size_t length){
       IPAddress ip=webSocket.remoteIP(num);
       Serial.print("Client connected: ");
       Serial.println(ip);
+
+      if(messageCount < 8){
+          messages[messageCount++] = ip.toString() + " joined";
+      }else{
+        for(int i=1;i<8;i++) messages[i-1]=messages[i];
+        messages[7]=ip.toString() + " joined";
+      }
+
+drawChat();
       broadcastClients();
       break;
     }
@@ -298,7 +310,22 @@ void webSocketEvent(uint8_t num,WStype_t type,uint8_t *payload,size_t length){
         text+=(char)payload[i];
       }
 
-      String json="{\"type\":\"chat\",\"ip\":\""+ip.toString()+"\",\"text\":"+text+"}";
+      if(messageCount < 8){
+      messages[messageCount++] = ip.toString() + ": " + text;
+      }else{
+        for(int i=1;i<8;i++){
+          messages[i-1]=messages[i];
+        }
+        messages[7]=ip.toString() + ": " + text;
+      }
+
+      drawChat();
+
+      String json = "{\"type\":\"chat\",\"ip\":\"" +
+                    ip.toString() +
+                    "\",\"text\":\"" +
+                    text +
+                    "\"}";
 
       for(uint8_t i=0;i<WEBSOCKETS_SERVER_CLIENT_MAX;i++){
         if(i != num){
@@ -314,7 +341,23 @@ void webSocketEvent(uint8_t num,WStype_t type,uint8_t *payload,size_t length){
   }
 }
 
+void drawChat() {
 
+  M5Cardputer.Display.fillScreen(TFT_BLACK);
+  M5Cardputer.Display.setCursor(0,0);
+  M5Cardputer.Display.setTextColor(TFT_GREEN);
+  M5Cardputer.Display.setTextSize(1);
+
+  M5Cardputer.Display.println("CardTalk");
+  M5Cardputer.Display.println("----------------");
+
+  int start = max(0, messageCount - 8);
+
+  for(int i = start; i < messageCount; i++){
+    M5Cardputer.Display.println(messages[i]);
+  }
+
+}
 
 void setup(){
 
@@ -326,6 +369,11 @@ void setup(){
   M5Cardputer.Display.fillScreen(TFT_BLACK);
   M5Cardputer.Display.setTextColor(TFT_GREEN);
   M5Cardputer.Display.setTextSize(1);
+
+  //print messages
+  messages[0] = "CardTalk Started";
+  messageCount = 1;
+  drawChat();
 
   IPAddress local_IP(192,168,4,1);
   IPAddress gateway(192,168,4,1);
