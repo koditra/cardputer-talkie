@@ -26,6 +26,15 @@ server.js      → Node.js WebSocket server
 package.json   → Project dependencies
 ```
 
+## Flashing
+
+1. Download `firmware.bin` from the latest GitHub Release.
+2. Connect your M5Stack Cardputer with USB.
+3. Open https://espflash.app/
+4. Select the firmware file.
+5. Click **Flash**.
+6. After flashing, reboot the Cardputer.
+
 ## Running
 
 Requirements:
