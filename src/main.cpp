@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <M5Cardputer.h>
 #include <WiFi.h>
 #include <WebServer.h>
 #include <WebSocketsServer.h>
@@ -9,6 +10,11 @@ const char* AP_PASS = "";
 
 WebServer server(80);
 WebSocketsServer webSocket(81);
+
+//messages and input variables
+String messages[8];
+int messageCount = 0;
+String currentInput = "";
 
 
 // web ui
@@ -295,7 +301,7 @@ void webSocketEvent(uint8_t num,WStype_t type,uint8_t *payload,size_t length){
       String json="{\"type\":\"chat\",\"ip\":\""+ip.toString()+"\",\"text\":"+text+"}";
 
       for(uint8_t i=0;i<WEBSOCKETS_SERVER_CLIENT_MAX;i++){
-        if(i!=num && webSocket.isConnected(i)){
+        if(i != num){
           webSocket.sendTXT(i,json);
         }
       }
@@ -308,9 +314,18 @@ void webSocketEvent(uint8_t num,WStype_t type,uint8_t *payload,size_t length){
   }
 }
 
+
+
 void setup(){
 
   Serial.begin(115200);
+
+  M5Cardputer.begin();
+
+  M5Cardputer.Display.setRotation(1);
+  M5Cardputer.Display.fillScreen(TFT_BLACK);
+  M5Cardputer.Display.setTextColor(TFT_GREEN);
+  M5Cardputer.Display.setTextSize(1);
 
   IPAddress local_IP(192,168,4,1);
   IPAddress gateway(192,168,4,1);
