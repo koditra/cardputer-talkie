@@ -3,89 +3,150 @@ const http = require("http");
 const WebSocket = require("ws");
 
 const app = express();
-
 app.use(express.static("public"));
 
 const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
 
-const wss = new WebSocket.Server({
-    server
-});
+const PORT = 3000;
 
-server.listen(3000, () => {
-    console.log("CardTalk running on port 3000");
-});
+const HISTORY_LIMIT = 64;
+const history = [];
 
-function updateClients() {
+function getTime() {
+    const d = new Date();
 
-    const count = [...wss.clients]
-        .filter(c => c.readyState === WebSocket.OPEN)
-        .length;
+    return (
+        String(d.getHours()).padStart(2, "0") +
+        ":" +
+        String(d.getMinutes()).padStart(2, "0")
+    );
+}
 
-    const msg = JSON.stringify({
-        type: "clients",
-        count
+function addHistory(sender, text) {
+    history.push({
+        time: getTime(),
+        sender,
+        text
     });
 
+    if (history.length > HISTORY_LIMIT) {
+        history.shift();
+    }
+}
+
+function clientCount() {
+    let count = 0;
+
     for (const client of wss.clients) {
-
         if (client.readyState === WebSocket.OPEN) {
-            client.send(msg);
+            count++;
         }
-
     }
 
+    return count;
+}
+
+function broadcast(obj) {
+    const json = JSON.stringify(obj);
+
+    for (const client of wss.clients) {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(json);
+        }
+    }
+}
+
+function updateClients() {
+    broadcast({
+        type: "clients",
+        count: clientCount()
+    });
 }
 
 wss.on("connection", (ws, req) => {
-
     const ip =
         req.headers["cf-connecting-ip"] ||
         req.socket.remoteAddress;
 
     ws.ip = ip;
 
-    console.log("Client connected:", ip);
+    ws.send(JSON.stringify({
+        type: "history",
+        messages: history
+    }));
+
+    const join = {
+        type: "chat",
+        time: getTime(),
+        sender: "SYSTEM",
+        text: `${ip} joined`
+    };
+
+    addHistory(join.sender, join.text);
+    broadcast(join);
 
     updateClients();
 
-    ws.on("message", (data) => {
+    ws.on("message", raw => {
+        let packet;
 
         try {
+            packet = JSON.parse(raw);
+        } catch {
+            return;
+        }
 
-            const msg = JSON.parse(data);
+        if (packet.type !== "chat") return;
 
-            if (msg.type === "message") {
+        const text = String(packet.text || "").trim();
 
-                for (const client of wss.clients) {
+        if (!text) return;
 
-                    if (
-                        client !== ws &&
-                        client.readyState === WebSocket.OPEN
-                    ) {
+        const msg = {
+            type: "chat",
+            time: getTime(),
+            sender: "Me",
+            text
+        };
 
-                        client.send(JSON.stringify({
-                            type: "message",
-                            text: msg.text,
-                            sender: ws.ip
-                        }));
+        addHistory(ip, text);
 
-                    }
+        ws.send(JSON.stringify(msg));
 
-                }
+        const others = JSON.stringify({
+            type: "chat",
+            time: msg.time,
+            sender: ip,
+            text
+        });
 
+        for (const client of wss.clients) {
+            if (
+                client !== ws &&
+                client.readyState === WebSocket.OPEN
+            ) {
+                client.send(others);
             }
-
-        } catch (e) {}
-
+        }
     });
 
     ws.on("close", () => {
+        const leave = {
+            type: "chat",
+            time: getTime(),
+            sender: "SYSTEM",
+            text: `${ip} left`
+        };
 
-        console.log("Client disconnected:", ws.ip);
+        addHistory(leave.sender, leave.text);
+
+        broadcast(leave);
 
         updateClients();
-
     });
+});
 
+server.listen(PORT, () => {
+    console.log(`CardTalk running on http://localhost:${PORT}`);
 });
