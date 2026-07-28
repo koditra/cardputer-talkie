@@ -1,172 +1,285 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CardTalk</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: monospace; }
-    body {
-      min-height: 100vh;
-      background: #050608;
-      color: #33ff88;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      padding: 16px;
-    }
-    #app {
-      width: min(900px, 100%);
-      height: min(92vh, 900px);
-      display: flex;
-      flex-direction: column;
-      border: 2px solid #33ff88;
-      border-radius: 10px;
-      overflow: hidden;
-      box-shadow: 0 0 20px #00ff4433;
-      background: #060708;
-    }
-    header, footer {
-      background: #08110d;
-      border-color: #33ff88;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 14px 18px;
-    }
-    header { justify-content: space-between; border-bottom: 1px solid #33ff88; }
-    footer { border-top: 1px solid #33ff88; }
-    header h1 { font-size: 22px; letter-spacing: 3px; }
-    #info { display: flex; gap: 18px; align-items: center; }
-    #status { color: #ff6666; }
-    #status.online { color: #33ff88; }
-    #clients { color: #66ddff; }
-    #chat {
-      flex: 1;
-      overflow-y: auto;
-      padding: 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      background: #060708;
-    }
-    .message {
-      background: #111;
-      border-left: 3px solid #33ff88;
-      padding: 8px 10px;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-    .system { border-left-color: orange; color: #ffd27a; }
-    .you { border-left-color: #66ccff; }
-    input {
-      flex: 1;
-      background: #111;
-      color: #33ff88;
-      border: 1px solid #33ff88;
-      padding: 12px;
-      outline: none;
-      font-size: 15px;
-    }
-    button {
-      background: #33ff88;
-      color: black;
-      border: none;
-      padding: 12px 22px;
-      cursor: pointer;
-      font-weight: bold;
-    }
-    button:hover { background: #66ffaa; }
-    ::-webkit-scrollbar { width: 8px; }
-    ::-webkit-scrollbar-thumb { background: #33ff88; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<title>CardTalk</title>
+
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: monospace;
+}
+
+body {
+    background: #06080b;
+    color: #33ff88;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+#app {
+    width: min(720px,95vw);
+    height: 92vh;
+    display: flex;
+    flex-direction: column;
+    border: 2px solid #33ff88;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 0 20px #00ff6640;
+}
+
+header {
+    background: #09110d;
+    border-bottom: 1px solid #33ff88;
+    padding: 14px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+header h1 {
+    letter-spacing: 2px;
+    font-size: 22px;
+}
+
+#status {
+    color: #ff6666;
+}
+
+#status.online {
+    color: #33ff88;
+}
+
+#chat {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px;
+    background: #050607;
+}
+
+.msg {
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    border-left: 4px solid #33ff88;
+    background: #111;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.msg.system {
+    border-left-color: #ffaa33;
+    color: #ffcc66;
+}
+
+.msg.me {
+    border-left-color: #44bbff;
+    color: #8fd8ff;
+}
+
+.msg.remote {
+    border-left-color: #33ff88;
+}
+
+footer {
+    background: #09110d;
+    border-top: 1px solid #33ff88;
+    display: flex;
+    gap: 10px;
+    padding: 12px;
+}
+
+input {
+    flex: 1;
+    background: #111;
+    color: #33ff88;
+    border: 1px solid #33ff88;
+    padding: 12px;
+    outline: none;
+}
+
+button {
+    background: #33ff88;
+    color: black;
+    border: none;
+    padding: 12px 20px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+button:hover {
+    background: #55ffaa;
+}
+
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #33ff88;
+}
+</style>
 </head>
+
 <body>
-  <div id="app">
-    <header>
-      <h1>CARDTALK</h1>
-      <div id="info">
-        <div id="clients">Clients: 0</div>
-        <div id="status">● Offline</div>
-      </div>
-    </header>
-    <div id="chat"></div>
-    <footer>
-      <input id="message" type="text" placeholder="Type message..." autocomplete="off" />
-      <button id="send">SEND</button>
-    </footer>
-  </div>
-  <script>
-    let ws;
-    const chat = document.getElementById("chat");
-    const input = document.getElementById("message");
-    const sendButton = document.getElementById("send");
-    const status = document.getElementById("status");
-    const clients = document.getElementById("clients");
 
-    function addMessage(text, cls = "") {
-      const div = document.createElement("div");
-      div.className = "message " + cls;
-      div.textContent = text;
-      chat.appendChild(div);
-      chat.scrollTop = chat.scrollHeight;
-    }
+<div id="app">
 
-    function connect() {
-      const protocol = location.protocol === "https:" ? "wss://" : "ws://";
-      ws = new WebSocket(protocol + location.host);
+<header>
+    <h1>CARDTALK</h1>
+    <div id="status">● Offline</div>
+</header>
 
-      ws.onopen = () => {
-        status.textContent = "● Online";
-        status.classList.add("online");
-      };
+<div id="chat"></div>
 
-      ws.onclose = () => {
+<footer>
+    <input id="message" placeholder="Type message...">
+    <button id="send">SEND</button>
+</footer>
+
+</div>
+
+<script>
+
+let ws;
+
+const chat = document.getElementById("chat");
+const input = document.getElementById("message");
+const status = document.getElementById("status");
+
+function addMessage(text, cls = "remote") {
+
+    const div = document.createElement("div");
+
+    div.className = "msg " + cls;
+    div.textContent = text;
+
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+
+}
+
+function connect() {
+
+    const protocol =
+        location.protocol === "https:"
+            ? "wss://"
+            : "ws://";
+
+    ws = new WebSocket(protocol + location.host);
+
+    ws.onopen = () => {
+
+        status.textContent = "● Connected";
+        status.className = "online";
+
+        addMessage("Connected to CardTalk", "system");
+
+    };
+
+    ws.onclose = () => {
+
         status.textContent = "● Offline";
-        status.classList.remove("online");
-        setTimeout(connect, 1500);
-      };
+        status.className = "";
 
-      ws.onerror = () => {
-        status.textContent = "● Offline";
-        status.classList.remove("online");
-      };
+        addMessage("Disconnected from CardTalk", "system");
 
-      ws.onmessage = event => {
-        let packet;
-        try { packet = JSON.parse(event.data); } catch { return; }
-        if (!packet || !packet.type) return;
+        setTimeout(connect, 2000);
 
-        if (packet.type === "history") {
-          chat.innerHTML = "";
-          for (const msg of packet.messages || []) {
-            addMessage(`[${msg.time}] ${msg.sender}: ${msg.text}`, msg.sender === "System" ? "system" : "");
-          }
-          return;
+    };
+
+    ws.onmessage = e => {
+
+        const data = JSON.parse(e.data);
+
+        if (data.type === "history") {
+
+            chat.innerHTML = "";
+
+            for (const msg of data.messages) {
+
+                const cls =
+                    msg.sender === "Me"
+                        ? "me"
+                        : msg.sender === "SYSTEM"
+                            ? "system"
+                            : "remote";
+
+                addMessage(
+                    `[${msg.time}] ${msg.sender}: ${msg.text}`,
+                    cls
+                );
+
+            }
+
+            return;
+
         }
 
-        if (packet.type === "chat") {
-          addMessage(`[${packet.time}] ${packet.sender}: ${packet.text}`, packet.sender === "System" ? "system" : "");
-          return;
+        if (data.type === "chat") {
+
+            const cls =
+                data.sender === "Me"
+                    ? "me"
+                    : data.sender === "SYSTEM"
+                        ? "system"
+                        : "remote";
+
+            addMessage(
+                `[${data.time}] ${data.sender}: ${data.text}`,
+                cls
+            );
+
         }
 
-        if (packet.type === "clients") {
-          clients.textContent = "Clients: " + packet.count;
+        if (data.type === "clients") {
+
+            status.textContent =
+                `● Connected (${data.count})`;
+
+            status.className = "online";
+
         }
-      };
-    }
 
-    function sendMessage() {
-      const text = input.value.trim();
-      if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
-      ws.send(JSON.stringify({ type: "chat", text }));
-      input.value = "";
-      input.focus();
-    }
+    };
 
-    sendButton.onclick = sendMessage;
-    input.addEventListener("keydown", e => { if (e.key === "Enter") sendMessage(); });
-    connect();
-  </script>
+}
+
+function sendMessage() {
+
+    const text = input.value.trim();
+
+    if (!text) return;
+
+    if (ws.readyState !== WebSocket.OPEN) return;
+
+    ws.send(JSON.stringify({
+        type: "chat",
+        text
+    }));
+
+    input.value = "";
+
+}
+
+document.getElementById("send").onclick = sendMessage;
+
+input.addEventListener("keydown", e => {
+
+    if (e.key === "Enter")
+        sendMessage();
+
+});
+
+connect();
+
+</script>
+
 </body>
 </html>
