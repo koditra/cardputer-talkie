@@ -1,6 +1,6 @@
 # CardTalk
 
-CardTalk is a simple real-time chat application inspired by the simplicity of a walkie-talkie. Users can join the same room and send messages instantly with no accounts, setup, or downloads required.
+CardTalk is a simple texting application inspired by the simplicity of a walkie talkie. Users can join the same room and send messages and dont need accounts, setup, or any downloads.
 
 The project includes both a Node.js server version for internet communication and an ESP32 version that creates its own Wi-Fi network for local communication.
 
@@ -12,35 +12,72 @@ The project includes both a Node.js server version for internet communication an
 
 ## Features
 
-* Real-time messaging using WebSockets
-* Displays the sender's IP address
-* A live counter which counts connected clients
-* Works on desktop and mobile
-* Runs on ESP32 or Cardputer!
+- chat directly from the cardputer using its keyboard
+- browser interface for desktop and mobile
+- live messages
+- stores the last 64 messages for new connections (last 8 on cardputer)
+- battery percentage display
+- notification sound for incoming messages
+- connected client counter
 
-## Project Structure
+---
 
-```text
-public/        → Frontend files
-server.js      → Node.js WebSocket server
-package.json   → Project dependencies
+## Requirements
+
+### Cardputer
+
+- M5Stack cardputer
+- usb-c cable
+
+### Server
+
+- node.js
+- npm
+- a computer connected to the same Wi-Fi network
+
+---
+
+## Flashing the Cardputer
+
+### easy method (recommended)
+
+1. Download the latest **firmware.bin** from the Releases page.
+2. Open https://espflash.app
+3. Connect your Cardputer using a USB-C cable.
+4. Select the downloaded **firmware.bin**.
+5. Click **Flash**.
+6. Reboot the Cardputer.
+
+### harder method (build from source)
+
+Install PlatformIO:
+
+```bash
+pip install platformio
 ```
 
-## Flashing
+Clone the repository:
 
-1. Download `firmware.bin` from the latest GitHub Release.
-2. Connect your M5Stack Cardputer with USB.
-3. Open https://espflash.app/
-4. Select the firmware file.
-5. Click **Flash**.
-6. After flashing, reboot the Cardputer.
+```bash
+git clone https://github.com/YOUR_USERNAME/cardputer-talkie.git
+cd cardputer-talkie
+```
 
-## Running
+Build:
 
-Requirements:
+```bash
+pio run
+```
 
-* Node.js
-* npm
+Upload:
+
+```bash
+pio run -t upload
+```
+
+---
+
+## Running the Server
 
 Install dependencies:
 
@@ -54,45 +91,99 @@ Start the server:
 node server.js
 ```
 
-Open:
+The server runs on port **3000** by default.
 
-```text
-http://localhost:3000
+---
+
+## Connecting
+
+1. Start the server.
+2. Connect the Cardputer to the same Wi-Fi network.
+3. Enter the server's local IP address on the Cardputer.
+4. Open a browser and visit:
+
+```
+http://SERVER_IP:3000
 ```
 
-To make it publicly accessible, expose port **3000** using Cloudflare Tunnel or another reverse proxy.
+Replace `SERVER_IP` with the IP address of the computer running the server.
 
-## ESP32 Version
+---
 
-The ESP32 version hosts everything directly on the board.
+## Browser Features
 
-After flashing the sketch, it creates a Wi-Fi network:
+- live chat
+- connected client counter
+- displays the last 64 messages
+- works on desktop and mobile browsers
 
-```text
-CardTalk
+---
+
+## Cardputer Features
+
+- native keyboard typing
+- battery percentage display
+- beep sound for notification alert
+- message history saves for last 8
+- text wrapping and quality of life features
+
+---
+
+## Project Structure
+
+```
+cardputer-talkie/
+├── public/
+│   └── index.html
+├── src/
+│   └── main.cpp
+├── server.js
+├── platformio.ini
+└── README.md
 ```
 
-Then open:
+---
 
-```text
-http://192.168.4.1
-```
+## Releases
 
-No internet connection is required for ESP32 Version!
+Each GitHub release includes:
 
-## Technologies
+- firmware.bin
+- Source code
+- Release notes
 
-* Node.js
-* Express
-* WebSockets
-* HTML
-* CSS
-* JavaScript
-* Arduino
-* ESP32
+u can flash the included firmware using https://espflash.app.
 
-## Future Plans
+---
 
-* Voice communication
-* Usernames instead of IP addresses
-* Private rooms
+## Why This Exists
+
+The M5Stack Cardputer pretty cool, and I thought it would be even cooler if i could talk to my friends who live right next door even when my parents have my phone! :)
+
+CardTalk was created as an easy way to chat between Cardputers and web browsers using a local AP (local wifi). I rlly liked how it turned out because now anyone can message me with any device with a web browser (as long as they are close by).
+
+---
+
+## future ideas :)
+
+- personal usernames
+- private messaging
+- encryption for messages
+- mesh network with LORA?
+
+---
+
+## Credits
+
+i made it :)
+
+Powered by:
+
+- PlatformIO
+- Arduino
+- ESP32
+- M5Cardputer
+- Express
+- ws (WebSocket)
+
+Special thanks to Lily Flowers (@lily the milk cool) for testing and feedback :)
