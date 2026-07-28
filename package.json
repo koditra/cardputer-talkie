@@ -1,11 +1,13 @@
 {
-  "name": "cardtalk",
-  "version": "1.0.0",
+  "name": "cardputer-talkie",
+  "version": "0.1.2",
+  "description": "A local chat app for the m5stack cardputer using websockets.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
-  "author": "Koditra",
+  "author": "koditra",
+  "license": "UNLICENSED",
   "dependencies": {
     "express": "^5.1.0",
     "ws": "^8.18.3"
