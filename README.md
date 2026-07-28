@@ -8,7 +8,7 @@ The project includes both a Node.js server version for internet communication an
 
 ### Chat Screen
 
-<img width="994" height="1404" alt="image" src="https://github.com/user-attachments/assets/65ab1493-321c-46da-9221-9490b8595ac1" />
+<img width="3024" height="1416" alt="image" src="https://github.com/user-attachments/assets/d2b088d6-b1d1-4711-a1c6-f8494ebe0e69" />
 
 ## Features
 
